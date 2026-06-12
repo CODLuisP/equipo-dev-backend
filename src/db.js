@@ -126,6 +126,7 @@ const db = {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
     return true;
   },
+  evictCache(teamId) { delete stores[teamId]; },
 };
 
 module.exports = db;

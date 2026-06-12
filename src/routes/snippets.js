@@ -34,6 +34,7 @@ router.patch('/:id', auth, (req, res) => {
 });
 
 router.delete('/:id', auth, (req, res) => {
+  if (!db.getById(req.teamId, 'snippets', req.params.id)) return res.status(404).json({ error: 'No encontrado' });
   db.remove(req.teamId, 'snippets', req.params.id);
   req.io.to(`team:${req.teamId}`).emit('snippet:deleted', { id: req.params.id });
   res.json({ ok: true });

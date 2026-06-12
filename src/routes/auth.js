@@ -75,7 +75,7 @@ router.post('/vault', auth, (req, res) => {
     expected = team.vaultPassword;
   }
 
-  if (password.trim().toLowerCase() !== expected.toLowerCase()) {
+  if (password.trim() !== expected) {
     return res.status(401).json({ error: 'Clave incorrecta' });
   }
   res.json({ ok: true });

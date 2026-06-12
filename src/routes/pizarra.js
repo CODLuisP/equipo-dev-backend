@@ -23,6 +23,7 @@ router.post('/shapes', auth, (req, res) => {
 });
 
 router.delete('/shapes/:id', auth, (req, res) => {
+  if (!db.getById(req.teamId, 'custom_shapes', req.params.id)) return res.status(404).json({ error: 'Shape no encontrada' });
   db.remove(req.teamId, 'custom_shapes', req.params.id);
   req.io.to(`team:${req.teamId}`).emit('shape:deleted', { id: req.params.id });
   res.json({ ok: true });
@@ -51,13 +52,17 @@ router.post('/files', auth, (req, res) => {
 });
 
 router.patch('/files/:id', auth, (req, res) => {
-  const updated = db.update(req.teamId, 'shared_files', req.params.id, req.body);
+  const allowed = ['name', 'x', 'y', 'authorName'];
+  const patch = {};
+  allowed.forEach(k => { if (req.body[k] !== undefined) patch[k] = req.body[k]; });
+  const updated = db.update(req.teamId, 'shared_files', req.params.id, patch);
   if (!updated) return res.status(404).json({ error: 'Archivo no encontrado' });
   req.io.to(`team:${req.teamId}`).emit('file:updated', updated);
   res.json(updated);
 });
 
 router.delete('/files/:id', auth, (req, res) => {
+  if (!db.getById(req.teamId, 'shared_files', req.params.id)) return res.status(404).json({ error: 'Archivo no encontrado' });
   db.remove(req.teamId, 'shared_files', req.params.id);
   req.io.to(`team:${req.teamId}`).emit('file:deleted', { id: req.params.id });
   res.json({ ok: true });

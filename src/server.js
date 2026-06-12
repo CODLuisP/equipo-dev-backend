@@ -159,6 +159,5 @@ const PORT = process.env.PORT || 3002;
 server.listen(PORT, () => {
   console.log(`\n🚀 Equipo Dev Backend corriendo en http://localhost:${PORT}`);
   console.log(`📡 Socket.io listo`);
-  console.log(`🔑 Contraseña del equipo: ${process.env.TEAM_PASSWORD}`);
-  console.log(`🗄️  SQLite: equipo.db\n`);
+  console.log(`🗄️  Base de datos: JSON files\n`);
 });

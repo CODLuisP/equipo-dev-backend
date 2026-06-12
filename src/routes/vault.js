@@ -34,6 +34,7 @@ router.patch('/:id', auth, (req, res) => {
 });
 
 router.delete('/:id', auth, (req, res) => {
+  if (!db.getById(req.teamId, 'vault', req.params.id)) return res.status(404).json({ error: 'No encontrado' });
   db.remove(req.teamId, 'vault', req.params.id);
   req.io.to(`team:${req.teamId}`).emit('vault:deleted', { id: req.params.id });
   res.json({ ok: true });

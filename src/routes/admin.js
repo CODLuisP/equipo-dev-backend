@@ -124,20 +124,15 @@ router.patch('/teams/:id', adminAuth, (req, res) => {
 // DELETE /admin/teams/:id — elimina un equipo y todos sus datos
 router.delete('/teams/:id', adminAuth, (req, res) => {
   if (req.params.id === db.LEGACY_TEAM_ID) {
-    // En lugar de borrar la cuenta, vaciamos todos sus datos
-    const collections = ['members', 'tasks', 'snippets', 'notes', 'vault', 'custom_shapes', 'shared_files'];
-    collections.forEach(c => {
-      // Usamos los métodos de db internos
-      const store = require('../db').getAll(db.LEGACY_TEAM_ID, c);
-      store.length = 0; // vaciar array
+    // Vaciar archivos JSON en disco
+    const legacyCollections = ['members', 'tasks', 'snippets', 'notes', 'vault', 'custom_shapes', 'shared_files'];
+    legacyCollections.forEach(c => {
       const file = path.join(__dirname, '..', '..', 'data', `${c}.json`);
       fs.writeFileSync(file, '[]', 'utf8');
     });
-    const pizarrasFile = path.join(__dirname, '..', '..', 'data', 'pizarras.json');
-    fs.writeFileSync(pizarrasFile, '{}', 'utf8');
-    
-    // Necesitamos que db.js recargue su caché o mutarla directamente
-    // Mutar los arrays en memoria garantiza que db.getAll() refleje los cambios
+    fs.writeFileSync(path.join(__dirname, '..', '..', 'data', 'pizarras.json'), '{}', 'utf8');
+    // Forzar recarga del caché en memoria en el próximo acceso
+    db.evictCache(db.LEGACY_TEAM_ID);
     console.log(`🗑️  Datos del equipo principal limpiados`);
     return res.json({ ok: true, cleared: true });
   }
