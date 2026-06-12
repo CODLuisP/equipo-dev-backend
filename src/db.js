@@ -8,6 +8,7 @@ if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 const sql = new Database(path.join(DATA_DIR, 'equipo.db'));
 sql.pragma('journal_mode = WAL');
 
+
 sql.exec(`
   CREATE TABLE IF NOT EXISTS teams (
     id           TEXT PRIMARY KEY,
