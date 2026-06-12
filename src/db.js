@@ -1,132 +1,162 @@
-/**
- * Base de datos en archivos JSON — multi-equipo.
- * Sin dependencias nativas — funciona en cualquier plataforma.
- *
- * Equipo legacy ('equipo-dev'): sus colecciones viven en /data/*.json (como siempre).
- * Equipos nuevos: cada uno tiene su carpeta /data/teams/<teamId>/*.json
- * El registro de equipos vive en /data/teams.json
- */
-const fs = require('fs');
+const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
-const TEAMS_DIR = path.join(DATA_DIR, 'teams');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(TEAMS_DIR)) fs.mkdirSync(TEAMS_DIR, { recursive: true });
+
+const sql = new Database(path.join(DATA_DIR, 'equipo.db'));
+sql.pragma('journal_mode = WAL');
+
+sql.exec(`
+  CREATE TABLE IF NOT EXISTS teams (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    password     TEXT NOT NULL,
+    vault_password TEXT,
+    created_at   INTEGER,
+    disabled     INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS items (
+    id         TEXT NOT NULL,
+    team_id    TEXT NOT NULL,
+    collection TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    PRIMARY KEY (id, team_id, collection)
+  );
+
+  CREATE TABLE IF NOT EXISTS pizarras (
+    team_id   TEXT NOT NULL,
+    member_id TEXT NOT NULL,
+    data      TEXT NOT NULL,
+    PRIMARY KEY (team_id, member_id)
+  );
+`);
 
 const LEGACY_TEAM_ID = 'equipo-dev';
-const collections = ['members', 'tasks', 'snippets', 'notes', 'vault', 'custom_shapes', 'shared_files'];
 
-// ─── Helpers de archivos ─────────────────────────────────────────────────────
-
-function teamDir(teamId) {
-  if (teamId === LEGACY_TEAM_ID) return DATA_DIR;
-  const dir = path.join(TEAMS_DIR, teamId);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  return dir;
+function rowToTeam(row) {
+  return {
+    id:            row.id,
+    name:          row.name,
+    password:      row.password,
+    vaultPassword: row.vault_password,
+    createdAt:     row.created_at,
+    disabled:      !!row.disabled,
+  };
 }
 
-function loadFile(file, def) {
-  if (!fs.existsSync(file)) return def;
-  try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
-  catch { return def; }
-}
+const stmts = {
+  getAllItems:    sql.prepare('SELECT data FROM items WHERE team_id = ? AND collection = ?'),
+  getItemById:   sql.prepare('SELECT data FROM items WHERE id = ? AND team_id = ? AND collection = ?'),
+  insertItem:    sql.prepare('INSERT INTO items (id, team_id, collection, data) VALUES (?, ?, ?, ?)'),
+  updateItem:    sql.prepare('UPDATE items SET data = ? WHERE id = ? AND team_id = ? AND collection = ?'),
+  deleteItem:    sql.prepare('DELETE FROM items WHERE id = ? AND team_id = ? AND collection = ?'),
+  deleteTeamItems: sql.prepare('DELETE FROM items WHERE team_id = ?'),
 
-function saveFile(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
-}
+  getPizarra:    sql.prepare('SELECT data FROM pizarras WHERE team_id = ? AND member_id = ?'),
+  upsertPizarra: sql.prepare('INSERT INTO pizarras (team_id, member_id, data) VALUES (?, ?, ?) ON CONFLICT(team_id, member_id) DO UPDATE SET data = excluded.data'),
+  deleteTeamPizarras: sql.prepare('DELETE FROM pizarras WHERE team_id = ?'),
 
-// ─── Stores por equipo (caché en memoria, lazy) ──────────────────────────────
-
-const stores = {}; // { teamId: { members: [], ..., pizarras: {} } }
-
-function getStore(teamId) {
-  if (!stores[teamId]) {
-    const dir = teamDir(teamId);
-    const store = {};
-    collections.forEach(c => { store[c] = loadFile(path.join(dir, `${c}.json`), []); });
-    store.pizarras = loadFile(path.join(dir, 'pizarras.json'), {});
-    stores[teamId] = store;
-  }
-  return stores[teamId];
-}
-
-function persist(teamId, name) {
-  saveFile(path.join(teamDir(teamId), `${name}.json`), getStore(teamId)[name]);
-}
-
-// ─── Registro de equipos ─────────────────────────────────────────────────────
-
-let teams = loadFile(path.join(DATA_DIR, 'teams.json'), []);
-function persistTeams() { saveFile(path.join(DATA_DIR, 'teams.json'), teams); }
-
-// ─── API ─────────────────────────────────────────────────────────────────────
+  getTeams:      sql.prepare('SELECT * FROM teams'),
+  getTeamById:   sql.prepare('SELECT * FROM teams WHERE id = ?'),
+  getTeamByPwd:  sql.prepare('SELECT * FROM teams WHERE password = ?'),
+  insertTeam:    sql.prepare('INSERT INTO teams (id, name, password, vault_password, created_at, disabled) VALUES (?, ?, ?, ?, ?, 0)'),
+  updateTeamRow: sql.prepare('UPDATE teams SET name = ?, password = ?, vault_password = ?, created_at = ?, disabled = ? WHERE id = ?'),
+  deleteTeam:    sql.prepare('DELETE FROM teams WHERE id = ?'),
+};
 
 const db = {
   LEGACY_TEAM_ID,
 
-  // Genérico (scoped por equipo)
-  getAll(teamId, col) { return getStore(teamId)[col]; },
-  getById(teamId, col, id) { return getStore(teamId)[col].find(r => r.id === id) || null; },
+  // ─── Colecciones ────────────────────────────────────────────────────────────
+
+  getAll(teamId, col) {
+    return stmts.getAllItems.all(teamId, col).map(r => JSON.parse(r.data));
+  },
+
+  getById(teamId, col, id) {
+    const row = stmts.getItemById.get(id, teamId, col);
+    return row ? JSON.parse(row.data) : null;
+  },
+
   insert(teamId, col, doc) {
-    getStore(teamId)[col].push(doc);
-    persist(teamId, col);
+    stmts.insertItem.run(doc.id, teamId, col, JSON.stringify(doc));
     return doc;
   },
+
   update(teamId, col, id, patch) {
-    const store = getStore(teamId);
-    const idx = store[col].findIndex(r => r.id === id);
-    if (idx === -1) return null;
-    store[col][idx] = { ...store[col][idx], ...patch };
-    persist(teamId, col);
-    return store[col][idx];
+    const row = stmts.getItemById.get(id, teamId, col);
+    if (!row) return null;
+    const updated = { ...JSON.parse(row.data), ...patch };
+    stmts.updateItem.run(JSON.stringify(updated), id, teamId, col);
+    return updated;
   },
+
   remove(teamId, col, id) {
-    const store = getStore(teamId);
-    store[col] = store[col].filter(r => r.id !== id);
-    persist(teamId, col);
+    stmts.deleteItem.run(id, teamId, col);
   },
 
-  // Pizarras (por memberId, scoped por equipo)
-  getPizarra(teamId, memberId) { return getStore(teamId).pizarras[memberId] || {}; },
+  // ─── Pizarras ───────────────────────────────────────────────────────────────
+
+  getPizarra(teamId, memberId) {
+    const row = stmts.getPizarra.get(teamId, memberId);
+    return row ? JSON.parse(row.data) : {};
+  },
+
   setPizarra(teamId, memberId, data) {
-    getStore(teamId).pizarras[memberId] = data;
-    saveFile(path.join(teamDir(teamId), 'pizarras.json'), getStore(teamId).pizarras);
+    stmts.upsertPizarra.run(teamId, memberId, JSON.stringify(data));
   },
 
-  // Equipos
-  getTeams() { return teams; },
-  getTeamById(id) { return teams.find(t => t.id === id) || null; },
-  findTeamByPassword(password) { return teams.find(t => t.password === password) || null; },
+  // ─── Equipos ────────────────────────────────────────────────────────────────
+
+  getTeams() {
+    return stmts.getTeams.all().map(rowToTeam);
+  },
+
+  getTeamById(id) {
+    const row = stmts.getTeamById.get(id);
+    return row ? rowToTeam(row) : null;
+  },
+
+  findTeamByPassword(password) {
+    const row = stmts.getTeamByPwd.get(password);
+    return row ? rowToTeam(row) : null;
+  },
+
   addTeam(team) {
-    teams.push(team);
-    persistTeams();
-    // Inicializar carpeta y colecciones vacías
-    const dir = teamDir(team.id);
-    collections.forEach(c => {
-      const file = path.join(dir, `${c}.json`);
-      if (!fs.existsSync(file)) saveFile(file, []);
-    });
-    saveFile(path.join(dir, 'pizarras.json'), {});
+    stmts.insertTeam.run(team.id, team.name, team.password, team.vaultPassword || null, team.createdAt || Date.now());
     return team;
   },
+
   updateTeam(id, patch) {
-    const idx = teams.findIndex(t => t.id === id);
-    if (idx === -1) return null;
-    teams[idx] = { ...teams[idx], ...patch };
-    persistTeams();
-    return teams[idx];
+    const row = stmts.getTeamById.get(id);
+    if (!row) return null;
+    const current = rowToTeam(row);
+    const updated = { ...current, ...patch };
+    stmts.updateTeamRow.run(updated.name, updated.password, updated.vaultPassword || null, updated.createdAt, updated.disabled ? 1 : 0, id);
+    return updated;
   },
+
   removeTeam(id) {
     if (id === LEGACY_TEAM_ID) return false;
-    teams = teams.filter(t => t.id !== id);
-    persistTeams();
-    delete stores[id];
-    const dir = path.join(TEAMS_DIR, id);
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+    sql.transaction(() => {
+      stmts.deleteTeamItems.run(id);
+      stmts.deleteTeamPizarras.run(id);
+      stmts.deleteTeam.run(id);
+    })();
     return true;
   },
-  evictCache(teamId) { delete stores[teamId]; },
+
+  clearTeamData(teamId) {
+    sql.transaction(() => {
+      stmts.deleteTeamItems.run(teamId);
+      stmts.deleteTeamPizarras.run(teamId);
+    })();
+  },
+
+  evictCache() {}, // no-op: SQLite no necesita caché en memoria
 };
 
 module.exports = db;

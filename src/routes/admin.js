@@ -1,6 +1,6 @@
 const express = require('express');
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
 const db = require('../db');
 const router = express.Router();
 
@@ -124,15 +124,7 @@ router.patch('/teams/:id', adminAuth, (req, res) => {
 // DELETE /admin/teams/:id — elimina un equipo y todos sus datos
 router.delete('/teams/:id', adminAuth, (req, res) => {
   if (req.params.id === db.LEGACY_TEAM_ID) {
-    // Vaciar archivos JSON en disco
-    const legacyCollections = ['members', 'tasks', 'snippets', 'notes', 'vault', 'custom_shapes', 'shared_files'];
-    legacyCollections.forEach(c => {
-      const file = path.join(__dirname, '..', '..', 'data', `${c}.json`);
-      fs.writeFileSync(file, '[]', 'utf8');
-    });
-    fs.writeFileSync(path.join(__dirname, '..', '..', 'data', 'pizarras.json'), '{}', 'utf8');
-    // Forzar recarga del caché en memoria en el próximo acceso
-    db.evictCache(db.LEGACY_TEAM_ID);
+    db.clearTeamData(db.LEGACY_TEAM_ID);
     console.log(`🗑️  Datos del equipo principal limpiados`);
     return res.json({ ok: true, cleared: true });
   }
