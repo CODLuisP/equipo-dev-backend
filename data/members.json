@@ -1,0 +1,26 @@
+[
+  {
+    "id": "c5f53ee1-0318-4566-9ef8-e10ecd8b9fb4",
+    "name": "Owen",
+    "role": "Full Stack Developer",
+    "color": "#E85D2F",
+    "avatarSeed": "vikingo",
+    "createdAt": 1780941037482
+  },
+  {
+    "id": "45debc65-6c80-4127-8045-5507b813fe61",
+    "name": "Wolet",
+    "role": "Full Stack Developer",
+    "color": "#3498DB",
+    "avatarSeed": "Wolet",
+    "createdAt": 1780953183380
+  },
+  {
+    "id": "2c383553-10d9-476a-84f3-711e04bdfe8f",
+    "name": "RedHat",
+    "role": "Full Stack Developer",
+    "color": "#2ECC71",
+    "avatarSeed": "co",
+    "createdAt": 1780978417703
+  }
+]
