@@ -1,9 +1,10 @@
 services:
   backend:
     build: .
+    container_name: equipo-dev-backend
     restart: unless-stopped
     ports:
-      - "3002:3002"
+      - "3006:3002"
     env_file:
       - .env
     volumes:
