@@ -15,7 +15,7 @@ const server = http.createServer(app);
 const FRONTEND = process.env.FRONTEND_URL || 'http://localhost:3001';
 
 app.use(cors({
-  origin: [FRONTEND, 'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'],
+  origin: true,
   credentials: true,
 }));
 app.use(express.json({ limit: '50mb' })); // archivos pueden ser grandes (base64)
@@ -23,7 +23,7 @@ app.use(express.json({ limit: '50mb' })); // archivos pueden ser grandes (base64
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin: [FRONTEND, 'http://localhost:3000', 'http://localhost:3001'],
+    origin: true,
     credentials: true,
   },
   maxHttpBufferSize: 50 * 1024 * 1024, // 50MB para imágenes base64
