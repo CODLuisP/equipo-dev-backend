@@ -9,10 +9,10 @@ router.get('/', auth, (req, res) => {
 });
 
 router.post('/', auth, (req, res) => {
-  const { title, status = 'pendiente', assignedTo = '' } = req.body;
+  const { title, status = 'pendiente', assignedTo = '', description = '', attachments = [] } = req.body;
   if (!title?.trim()) return res.status(400).json({ error: 'Título requerido' });
 
-  const task = { id: uuid(), title: title.trim(), status, assignedTo, createdAt: Date.now() };
+  const task = { id: uuid(), title: title.trim(), status, assignedTo, description, attachments, createdAt: Date.now() };
   db.insert(req.teamId, 'tasks', task);
 
   req.io.to(`team:${req.teamId}`).emit('task:added', task);
@@ -23,9 +23,16 @@ router.patch('/:id', auth, (req, res) => {
   if (!db.getById(req.teamId, 'tasks', req.params.id)) return res.status(404).json({ error: 'No encontrada' });
 
   const patch = {};
-  if (req.body.title !== undefined)      patch.title = req.body.title;
-  if (req.body.status !== undefined)     patch.status = req.body.status;
-  if (req.body.assignedTo !== undefined) patch.assignedTo = req.body.assignedTo;
+  if (req.body.title       !== undefined) patch.title       = req.body.title;
+  if (req.body.status      !== undefined) {
+    patch.status = req.body.status;
+    if (req.body.status === 'completada') patch.completedAt = Date.now();
+    else patch.completedAt = null;
+  }
+  if (req.body.assignedTo  !== undefined) patch.assignedTo  = req.body.assignedTo;
+  if (req.body.description !== undefined) patch.description = req.body.description;
+  if (req.body.attachments !== undefined) patch.attachments = req.body.attachments;
+  if (req.body.blocks      !== undefined) patch.blocks      = req.body.blocks;
 
   const updated = db.update(req.teamId, 'tasks', req.params.id, patch);
   req.io.to(`team:${req.teamId}`).emit('task:updated', updated);

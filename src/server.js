@@ -154,10 +154,35 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { background: #0a0c1a; } .swagger-ui .topbar-wrapper img { display: none; } .swagger-ui .topbar-wrapper::before { content: "🚀 Equipo Dev API"; color: #60a5fa; font-size: 18px; font-weight: 800; }',
 }));
 
+// ─── Limpieza automática de tareas completadas (+24h) ─────────────────────────
+const TTL_MS = 24 * 60 * 60 * 1000; // 24 horas
+
+function purgeCompletedTasks() {
+  const now = Date.now();
+  const teams = db.getTeams();
+  let total = 0;
+  for (const team of teams) {
+    const tasks = db.getAll(team.id, 'tasks');
+    for (const task of tasks) {
+      if (task.status !== 'completada') continue;
+      const ts = task.completedAt || task.createdAt || 0;
+      if (now - ts >= TTL_MS) {
+        db.remove(team.id, 'tasks', task.id);
+        io.to(`team:${team.id}`).emit('task:deleted', { id: task.id });
+        total++;
+      }
+    }
+  }
+  if (total > 0) console.log(`🗑️  Purge: ${total} tarea(s) completada(s) eliminada(s)`);
+}
+
 // ─── Arrancar ─────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3002;
 server.listen(PORT, () => {
   console.log(`\n🚀 Equipo Dev Backend corriendo en http://localhost:${PORT}`);
   console.log(`📡 Socket.io listo`);
   console.log(`🗄️  Base de datos: JSON files\n`);
+
+  purgeCompletedTasks(); // ejecutar al arrancar
+  setInterval(purgeCompletedTasks, 60 * 60 * 1000); // cada hora
 });
