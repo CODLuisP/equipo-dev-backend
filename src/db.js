@@ -18,6 +18,7 @@ sql.exec(`
     created_at   INTEGER,
     disabled     INTEGER DEFAULT 0
   );
+  
 
   CREATE TABLE IF NOT EXISTS items (
     id         TEXT NOT NULL,
