@@ -144,6 +144,7 @@ app.use('/notes',    require('./routes/notes'));
 app.use('/vault',    require('./routes/vault'));
 app.use('/pizarra',  require('./routes/pizarra'));
 app.use('/links',    require('./routes/links'));
+app.use('/websites', require('./routes/websites'));
 app.use('/admin',    require('./routes/admin'));
 
 // Health check
