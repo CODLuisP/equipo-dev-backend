@@ -37,15 +37,18 @@ router.get('/', auth, (req, res) => {
 });
 
 router.post('/', auth, (req, res) => {
-  const { name, url, image = '', accounts = [], authorId = '' } = req.body;
+  const { name, url, image = '', accounts = [], authorId = '', kind, description = '' } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Nombre requerido' });
 
+  const safeKind = kind === 'resource' ? 'resource' : 'credentials';
   const site = {
     id: uuid(),
     name: name.trim(),
     url: normalizeUrl(url),
     image: image || '',
-    accounts: sanitizeAccounts(accounts),
+    kind: safeKind,
+    description: safeKind === 'resource' ? (description || '').toString() : '',
+    accounts: safeKind === 'resource' ? [] : sanitizeAccounts(accounts),
     authorId,
     createdAt: Date.now(),
   };
@@ -59,10 +62,17 @@ router.patch('/:id', auth, (req, res) => {
     return res.status(404).json({ error: 'No encontrado' });
 
   const patch = {};
-  if (req.body.name     !== undefined) patch.name     = (req.body.name || '').toString().trim();
-  if (req.body.url      !== undefined) patch.url      = normalizeUrl(req.body.url);
-  if (req.body.image    !== undefined) patch.image    = req.body.image || '';
-  if (req.body.accounts !== undefined) patch.accounts = sanitizeAccounts(req.body.accounts);
+  if (req.body.name        !== undefined) patch.name        = (req.body.name || '').toString().trim();
+  if (req.body.url         !== undefined) patch.url         = normalizeUrl(req.body.url);
+  if (req.body.image       !== undefined) patch.image       = req.body.image || '';
+  if (req.body.kind        !== undefined) patch.kind        = req.body.kind === 'resource' ? 'resource' : 'credentials';
+  if (req.body.description !== undefined) patch.description = (req.body.description || '').toString();
+  if (req.body.accounts    !== undefined) patch.accounts    = sanitizeAccounts(req.body.accounts);
+
+  // Si pasa a recurso, no conserva cuentas; si pasa a credenciales, limpia descripción.
+  const finalKind = patch.kind ?? db.getById(req.teamId, 'websites', req.params.id)?.kind;
+  if (finalKind === 'resource') patch.accounts = [];
+  if (finalKind === 'credentials') patch.description = '';
 
   const updated = db.update(req.teamId, 'websites', req.params.id, patch);
   req.io.to(`team:${req.teamId}`).emit('website:updated', updated);
