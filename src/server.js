@@ -50,12 +50,14 @@ io.use((socket, next) => {
 // Estado AFK y presencia en memoria, separados por equipo
 const radarState  = {}; // { teamId: { userId: RadarEntry } }
 const presenceMap = {}; // { teamId: { userId: { userId, name, color, avatarSeed, lastSeen } } }
+const userSockets = {}; // { teamId: { userId: Set<socketId> } } — para saber cuándo un usuario cierra TODAS sus pestañas
 
 io.on('connection', (socket) => {
   const teamId = socket.teamId;
   const room = `team:${teamId}`;
   if (!radarState[teamId])  radarState[teamId]  = {};
   if (!presenceMap[teamId]) presenceMap[teamId] = {};
+  if (!userSockets[teamId]) userSockets[teamId] = {};
 
   console.log(`✅ Cliente conectado: ${socket.id} (equipo: ${teamId})`);
 
@@ -99,6 +101,9 @@ io.on('connection', (socket) => {
   socket.on('presence:identify', (data) => {
     // data = { userId, name, color, avatarSeed }
     socket._presenceId = data.userId;
+    // Registrar este socket para el usuario (soporta varias pestañas/dispositivos)
+    if (!userSockets[teamId][data.userId]) userSockets[teamId][data.userId] = new Set();
+    userSockets[teamId][data.userId].add(socket.id);
     const entry = { userId: data.userId, name: data.name, color: data.color, avatarSeed: data.avatarSeed, lastSeen: Date.now() };
     presenceMap[teamId][data.userId] = entry;
     // Notificar a todos (incluido el que se conecta) con info completa
@@ -120,10 +125,28 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     const uid = socket._presenceId;
-    if (uid && presenceMap[teamId][uid]) {
-      delete presenceMap[teamId][uid];
-      io.to(room).emit('presence:update', { userId: uid, lastSeen: null });
-      console.log(`🔴 Presencia: ${uid} desconectado`);
+    if (uid) {
+      // Quitar este socket del conjunto del usuario
+      const set = userSockets[teamId][uid];
+      if (set) {
+        set.delete(socket.id);
+        // Solo marcar offline si ya NO le quedan pestañas/dispositivos abiertos
+        if (set.size === 0) {
+          delete userSockets[teamId][uid];
+          if (presenceMap[teamId][uid]) {
+            delete presenceMap[teamId][uid];
+            io.to(room).emit('presence:update', { userId: uid, lastSeen: null });
+          }
+          // Si estaba AFK, limpiar su estado para que no quede "fantasma" para los demás
+          if (radarState[teamId][uid] && radarState[teamId][uid].isAFK) {
+            const back = { ...radarState[teamId][uid], isAFK: false, timestamp: Date.now() };
+            delete radarState[teamId][uid];
+            io.to(room).emit('radar:back', back);
+            console.log(`🚪 ${back.name || uid} se desconectó estando AFK → limpiado`);
+          }
+          console.log(`🔴 Presencia: ${uid} desconectado (sin pestañas activas)`);
+        }
+      }
     }
     console.log(`❌ Cliente desconectado: ${socket.id}`);
   });
