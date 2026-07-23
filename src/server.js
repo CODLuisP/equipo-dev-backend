@@ -78,12 +78,6 @@ io.on('connection', (socket) => {
     console.log(`📡 radar:request → enviando ${afk.length} AFK activos`);
   });
 
-  // Unirse a la sala personal de pizarra
-  socket.on('join:pizarra', (memberId) => {
-    socket.join(`pizarra:${memberId}`);
-    console.log(`📋 ${socket.id} unido a pizarra:${memberId}`);
-  });
-
   // ── Radar AFK ──────────────────────────────────────────────────────────────
   socket.on('radar:afk', (entry) => {
     radarState[teamId][entry.userId] = entry;
@@ -165,7 +159,7 @@ app.use('/tasks',    require('./routes/tasks'));
 app.use('/snippets', require('./routes/snippets'));
 app.use('/notes',    require('./routes/notes'));
 app.use('/vault',    require('./routes/vault'));
-app.use('/pizarra',  require('./routes/pizarra'));
+app.use('/pizarra/files', require('./routes/archivos'));
 app.use('/links',    require('./routes/links'));
 app.use('/websites', require('./routes/websites'));
 app.use('/admin',    require('./routes/admin'));

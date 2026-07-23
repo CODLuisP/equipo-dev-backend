@@ -28,12 +28,6 @@ sql.exec(`
     PRIMARY KEY (id, team_id, collection)
   );
 
-  CREATE TABLE IF NOT EXISTS pizarras (
-    team_id   TEXT NOT NULL,
-    member_id TEXT NOT NULL,
-    data      TEXT NOT NULL,
-    PRIMARY KEY (team_id, member_id)
-  );
 `);
 
 const LEGACY_TEAM_ID = 'equipo-dev';
@@ -56,10 +50,6 @@ const stmts = {
   updateItem:    sql.prepare('UPDATE items SET data = ? WHERE id = ? AND team_id = ? AND collection = ?'),
   deleteItem:    sql.prepare('DELETE FROM items WHERE id = ? AND team_id = ? AND collection = ?'),
   deleteTeamItems: sql.prepare('DELETE FROM items WHERE team_id = ?'),
-
-  getPizarra:    sql.prepare('SELECT data FROM pizarras WHERE team_id = ? AND member_id = ?'),
-  upsertPizarra: sql.prepare('INSERT INTO pizarras (team_id, member_id, data) VALUES (?, ?, ?) ON CONFLICT(team_id, member_id) DO UPDATE SET data = excluded.data'),
-  deleteTeamPizarras: sql.prepare('DELETE FROM pizarras WHERE team_id = ?'),
 
   getTeams:      sql.prepare('SELECT * FROM teams'),
   getTeamById:   sql.prepare('SELECT * FROM teams WHERE id = ?'),
@@ -100,17 +90,6 @@ const db = {
     stmts.deleteItem.run(id, teamId, col);
   },
 
-  // ─── Pizarras ───────────────────────────────────────────────────────────────
-
-  getPizarra(teamId, memberId) {
-    const row = stmts.getPizarra.get(teamId, memberId);
-    return row ? JSON.parse(row.data) : {};
-  },
-
-  setPizarra(teamId, memberId, data) {
-    stmts.upsertPizarra.run(teamId, memberId, JSON.stringify(data));
-  },
-
   // ─── Equipos ────────────────────────────────────────────────────────────────
 
   getTeams() {
@@ -145,17 +124,13 @@ const db = {
     if (id === LEGACY_TEAM_ID) return false;
     sql.transaction(() => {
       stmts.deleteTeamItems.run(id);
-      stmts.deleteTeamPizarras.run(id);
       stmts.deleteTeam.run(id);
     })();
     return true;
   },
 
   clearTeamData(teamId) {
-    sql.transaction(() => {
-      stmts.deleteTeamItems.run(teamId);
-      stmts.deleteTeamPizarras.run(teamId);
-    })();
+    stmts.deleteTeamItems.run(teamId);
   },
 
   evictCache() {}, // no-op: SQLite no necesita caché en memoria
