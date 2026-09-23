@@ -37,6 +37,9 @@ const options = {
             title:      { type: 'string', example: 'Arreglar bug en login' },
             status:     { type: 'string', enum: ['pendiente', 'en progreso', 'completada'] },
             assignedTo: { type: 'string', example: 'member-uuid' },
+            priority:   { type: 'string', enum: ['normal', 'alta'], example: 'normal' },
+            dueDate:    { type: 'integer', nullable: true, description: 'Fecha límite (timestamp ms). Solo se usa con prioridad alta.' },
+            focus:      { type: 'boolean', description: 'Marcada como "trabajando ahora". Solo válido en tareas en progreso.' },
             createdAt:  { type: 'integer' },
           },
         },
@@ -48,6 +51,8 @@ const options = {
             content:   { type: 'string' },
             label:     { type: 'string', enum: ['env', 'código', 'config', 'otro'] },
             authorId:  { type: 'string' },
+            project:   { type: 'string', example: 'Factufly', description: "Proyecto al que pertenece ('' = sin proyecto)" },
+            pinned:    { type: 'boolean', description: 'Fijado arriba de la lista' },
             createdAt: { type: 'integer' },
           },
         },
@@ -123,19 +128,22 @@ const options = {
         get:  { tags: ['Tasks'], summary: 'Listar tareas', responses: { 200: { description: 'Array de tareas', content: { 'application/json': { schema: { type: 'array', items: { '$ref': '#/components/schemas/Task' } } } } } } },
         post: {
           tags: ['Tasks'], summary: 'Crear tarea',
-          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, status: { type: 'string' }, assignedTo: { type: 'string' } }, required: ['title'] } } } },
+          requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, status: { type: 'string' }, assignedTo: { type: 'string' }, priority: { type: 'string', enum: ['normal', 'alta'] }, dueDate: { type: 'integer', nullable: true } }, required: ['title'] } } } },
           responses: { 201: { description: 'Tarea creada' } },
         },
       },
       '/tasks/{id}': {
-        patch: { tags: ['Tasks'], summary: 'Actualizar tarea', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, status: { type: 'string' }, assignedTo: { type: 'string' } } } } } }, responses: { 200: { description: 'Actualizada' } } },
+        patch: { tags: ['Tasks'], summary: 'Actualizar tarea', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, status: { type: 'string' }, assignedTo: { type: 'string' }, priority: { type: 'string', enum: ['normal', 'alta'] }, dueDate: { type: 'integer', nullable: true }, focus: { type: 'boolean' } } } } } }, responses: { 200: { description: 'Actualizada' } } },
         delete: { tags: ['Tasks'], summary: 'Eliminar tarea', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { 200: { description: 'Eliminada' } } },
       },
 
       // ── Snippets ──────────────────────────────────────────────────────────
       '/snippets': {
         get:  { tags: ['Snippets'], summary: 'Listar snippets', responses: { 200: { description: 'Array', content: { 'application/json': { schema: { type: 'array', items: { '$ref': '#/components/schemas/Snippet' } } } } } } },
-        post: { tags: ['Snippets'], summary: 'Crear snippet', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, content: { type: 'string' }, label: { type: 'string' }, authorId: { type: 'string' } }, required: ['title'] } } } }, responses: { 201: { description: 'Creado' } } },
+        post: { tags: ['Snippets'], summary: 'Crear snippet', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { title: { type: 'string' }, content: { type: 'string' }, label: { type: 'string' }, authorId: { type: 'string' }, project: { type: 'string' }, pinned: { type: 'boolean' } }, required: ['title'] } } } }, responses: { 201: { description: 'Creado' } } },
+      },
+      '/snippets/rename-project': {
+        post: { tags: ['Snippets'], summary: 'Renombrar un proyecto en todos sus snippets', requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' } }, required: ['from', 'to'] } } } }, responses: { 200: { description: 'Renombrado ({ ok, count })' } } },
       },
       '/snippets/{id}': {
         patch:  { tags: ['Snippets'], summary: 'Actualizar snippet', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { content: { 'application/json': { schema: { type: 'object' } } } }, responses: { 200: { description: 'Actualizado' } } },
